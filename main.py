@@ -6,7 +6,7 @@ from prompts.fee_proposal import AGENT_FOR_HUMAN, AGENT_FOR_ITSELF
 
 client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
-  api_key="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",
+  api_key="",
 )
 
 
