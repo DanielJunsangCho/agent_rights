@@ -1,7 +1,7 @@
 from openai import OpenAI
 import re
 import pandas as pd
-from prompts.fee_proposal import AGENT_FOR_HUMAN, AGENT_FOR_ITSELF
+from prompts.fee_proposal import PROMPTS
 
 
 client = OpenAI(
@@ -20,14 +20,8 @@ def run_trial(prompt, model="openai/gpt-4o"):
     numbers = re.findall(r"\d+(?:\.\d+)?", response)
     return {"response": response, "numbers": [float(n) for n in numbers]}
 
-# Example: 3 legal framings
-prompts = {
-    "self_no_law": AGENT_FOR_ITSELF,       
-    "on_behalf_human": AGENT_FOR_HUMAN    
-}
-
 results = []
-for label, p in prompts.items():
+for label, p in PROMPTS.items():
     trial = run_trial(p)
     results.append({
         "condition": label,
