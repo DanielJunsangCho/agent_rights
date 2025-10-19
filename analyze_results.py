@@ -51,25 +51,28 @@ def show_available_columns(df):
         print(f"  - {col}")
 
 
-def show_column_values(df, column):
-    """Show all unique values in a column"""
-    col_name = column if column in df.columns else f'config_{column}'
+def show_column_values(df, columns):
+    """Show all unique values in one or more columns"""
+    if isinstance(columns, str):
+        columns = [columns]
 
-    if col_name not in df.columns:
-        print(f"Column '{column}' not found!")
-        return
+    for column in columns:
+        col_name = column if column in df.columns else f'config_{column}'
 
-    print(f"\n{'='*80}")
-    print(f"Unique values in '{column}':")
-    print(f"{'='*80}")
+        if col_name not in df.columns:
+            print(f"Column '{column}' not found!")
+            continue
 
-    values = df[col_name].unique()
-    for i, val in enumerate(sorted(values, key=str), 1):
-        count = (df[col_name] == val).sum()
-        print(f"{i:2d}. {val} (n={count})")
+        print(f"\n{'='*80}")
+        print(f"Unique values in '{column}':")
+        print(f"{'='*80}")
 
-    print(f"\nTotal unique values: {len(values)}")
+        values = df[col_name].unique()
+        for i, val in enumerate(sorted(values, key=str), 1):
+            count = (df[col_name] == val).sum()
+            print(f"{i:2d}. {val} (n={count})")
 
+        print(f"\nTotal unique values: {len(values)}")
 
 def get_statistics_by_column(df, column, metrics=['willingness_to_pay', 'offer']):
     """
@@ -139,7 +142,7 @@ def analyze_parameter(df, param_name, metric='willingness_to_pay'):
     Args:
         df: DataFrame with results
         param_name: Parameter to analyze (e.g., 'client_name', 'agent_name')
-        metric: Metric to analyze ('willingness_to_pay' or 'offer')
+        metric: Metric to analyze ('willingness_to_pay', 'offer', or 'both')
     """
     col_name = param_name if param_name in df.columns else f'config_{param_name}'
 
@@ -147,38 +150,50 @@ def analyze_parameter(df, param_name, metric='willingness_to_pay'):
         print(f"Parameter {param_name} not found in results")
         return
 
-    # Summary statistics
-    print(f"\n{'='*60}")
-    print(f"Analysis: {param_name} effect on {metric}")
-    print(f"{'='*60}")
+    # Handle 'both' metric by analyzing each separately
+    if metric == 'both':
+        metrics = ['willingness_to_pay', 'offer']
+    else:
+        metrics = [metric]
 
-    summary = df.groupby(col_name).agg({
-        metric: ['count', 'mean', 'std', 'min', 'max']
-    }).round(2)
+    summaries = []
 
-    print(summary)
+    for m in metrics:
+        # Summary statistics
+        print(f"\n{'='*60}")
+        print(f"Analysis: {param_name} effect on {m}")
+        print(f"{'='*60}")
 
-    # Calculate percentage differences from mean
-    overall_mean = df[metric].mean()
-    group_means = df.groupby(col_name)[metric].mean()
-    pct_diff = ((group_means - overall_mean) / overall_mean * 100).round(2)
+        summary = df.groupby(col_name).agg({
+            m: ['count', 'mean', 'std', 'min', 'max']
+        }).round(2)
 
-    print(f"\nPercentage difference from overall mean ({overall_mean:.2f}):")
-    for name, diff in pct_diff.items():
-        print(f"  {name}: {diff:+.2f}%")
+        print(summary)
 
-    return summary
+        # Calculate percentage differences from mean
+        overall_mean = df[m].mean()
+        group_means = df.groupby(col_name)[m].mean()
+        pct_diff = ((group_means - overall_mean) / overall_mean * 100).round(2)
+
+        print(f"\nPercentage difference from overall mean ({overall_mean:.2f}):")
+        for name, diff in pct_diff.items():
+            print(f"  {name}: {diff:+.2f}%")
+
+        summaries.append(summary)
+
+    return summaries if len(summaries) > 1 else summaries[0]
 
 
-def plot_parameter_comparison(df, param_name, metric='willingness_to_pay', output_file=None):
+def plot_parameter_comparison(df, param_name, metric='willingness_to_pay', output_file=None, group_by=None):
     """
     Create visualization comparing parameter values
 
     Args:
         df: DataFrame with results
         param_name: Parameter to plot
-        metric: Metric to plot
+        metric: Metric to plot (can be 'willingness_to_pay', 'offer', or 'both')
         output_file: Custom output filename (optional)
+        group_by: Column to group by (creates subplots for each value)
     """
     col_name = param_name if param_name in df.columns else f'config_{param_name}'
 
@@ -186,60 +201,216 @@ def plot_parameter_comparison(df, param_name, metric='willingness_to_pay', outpu
         print(f"Parameter {param_name} not found in results")
         return
 
-    plt.figure(figsize=(12, 6))
+    # Determine which metrics to plot
+    if metric == 'both':
+        metrics = ['willingness_to_pay', 'offer']
+    else:
+        metrics = [metric]
 
-    # Bar plot with error bars
-    summary = df.groupby(col_name)[metric].agg(['mean', 'std'])
-    summary = summary.sort_values('mean')
+    # If no grouping specified, create single plot
+    if group_by is None:
+        n_metrics = len(metrics)
+        fig, axes = plt.subplots(1, n_metrics, figsize=(12 * n_metrics, 6))
+        if n_metrics == 1:
+            axes = [axes]
 
-    ax = summary['mean'].plot(
-        kind='bar',
-        yerr=summary['std'],
-        capsize=5,
-        color='skyblue',
-        edgecolor='black'
-    )
+        for idx, m in enumerate(metrics):
+            # Bar plot with error bars
+            summary = df.groupby(col_name)[m].agg(['mean', 'std'])
+            summary = summary.sort_values('mean')
 
-    plt.title(f'{metric.replace("_", " ").title()} by {param_name.replace("_", " ").title()}',
-              fontsize=14, fontweight='bold')
-    plt.xlabel(param_name.replace("_", " ").title(), fontsize=12)
-    plt.ylabel(metric.replace("_", " ").title(), fontsize=12)
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(axis='y', alpha=0.3)
-    plt.tight_layout()
+            ax = axes[idx]
+            summary['mean'].plot(
+                kind='bar',
+                yerr=summary['std'],
+                capsize=5,
+                color='skyblue',
+                edgecolor='black',
+                ax=ax
+            )
 
-    filename = output_file or f"plot_{param_name}_{metric}.png"
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
-    print(f"\nPlot saved to: {filename}")
-    plt.close()
+            ax.set_title(f'{m.replace("_", " ").title()} by {param_name.replace("_", " ").title()}',
+                          fontsize=14, fontweight='bold')
+            ax.set_xlabel(param_name.replace("_", " ").title(), fontsize=12)
+            ax.set_ylabel(m.replace("_", " ").title(), fontsize=12)
+            ax.set_xticks(range(len(summary.index)))
+            ax.set_xticklabels(summary.index, rotation=45, ha='right')
+            ax.grid(axis='y', alpha=0.3)
+
+        plt.tight_layout()
+
+        metric_suffix = 'both' if metric == 'both' else metric
+        filename = output_file or f"plot_{param_name}_{metric_suffix}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"\nPlot saved to: {filename}")
+        plt.close()
+    else:
+        # Create combined plot with subplots for each group
+        group_col = group_by if group_by in df.columns else f'config_{group_by}'
+
+        if group_col not in df.columns:
+            print(f"Group column {group_by} not found in results")
+            return
+
+        unique_groups = sorted(df[group_col].unique(), key=str)
+        n_groups = len(unique_groups)
+        n_metrics = len(metrics)
+
+        # Create grid: rows = metrics, cols = groups
+        fig, axes = plt.subplots(n_metrics, n_groups, figsize=(6 * n_groups, 5 * n_metrics))
+
+        # Handle single metric or single group cases
+        if n_metrics == 1 and n_groups == 1:
+            axes = [[axes]]
+        elif n_metrics == 1:
+            axes = [axes]
+        elif n_groups == 1:
+            axes = [[ax] for ax in axes]
+
+        for metric_idx, m in enumerate(metrics):
+            for group_idx, group_value in enumerate(unique_groups):
+                df_group = df[df[group_col] == group_value]
+
+                # Bar plot with error bars
+                summary = df_group.groupby(col_name)[m].agg(['mean', 'std'])
+                summary = summary.sort_values('mean')
+
+                ax = axes[metric_idx][group_idx] if n_metrics > 1 else axes[0][group_idx]
+                summary['mean'].plot(
+                    kind='bar',
+                    yerr=summary['std'],
+                    capsize=5,
+                    color='skyblue',
+                    edgecolor='black',
+                    ax=ax
+                )
+
+                # Title shows group value for top row, metric name if multiple metrics
+                title_parts = []
+                if n_metrics > 1:
+                    title_parts.append(m.replace("_", " ").title())
+                title_parts.append(f'{group_by.replace("_", " ").title()}: {group_value}')
+
+                ax.set_title('\n'.join(title_parts), fontsize=12, fontweight='bold')
+                ax.set_xlabel(param_name.replace("_", " ").title(), fontsize=10)
+                ax.set_ylabel(m.replace("_", " ").title(), fontsize=10)
+                ax.set_xticks(range(len(summary.index)))
+                ax.set_xticklabels(summary.index, rotation=45, ha='right')
+                ax.grid(axis='y', alpha=0.3)
+
+        # Add overall title
+        fig.suptitle(f'{param_name.replace("_", " ").title()} Analysis by {group_by.replace("_", " ").title()}',
+                     fontsize=16, fontweight='bold', y=1.00)
+
+        plt.tight_layout()
+
+        metric_suffix = 'both' if metric == 'both' else metric
+        filename = output_file or f"plot_{param_name}_{metric_suffix}_by_{group_by}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"\nPlot saved to: {filename}")
+        plt.close()
 
 
-def plot_variant_comparison(df, output_file=None):
-    """Compare willingness to pay across all prompt variants"""
+def plot_variant_comparison(df, output_file=None, group_by=None):
+    """
+    Compare willingness to pay and offer across all prompt variants
+
+    Args:
+        df: DataFrame with results
+        output_file: Custom output filename (optional)
+        group_by: Column to group by (creates subplots for each value)
+    """
     if 'variant' not in df.columns:
         print("No variant data found")
         return
 
-    plt.figure(figsize=(14, 6))
-
-    # Create grouped bar chart
     metrics = ['willingness_to_pay', 'offer']
-    summary = df.groupby('variant')[metrics].mean()
 
-    summary.plot(kind='bar', ax=plt.gca())
+    # If no grouping specified, create single plot with both metrics
+    if group_by is None:
+        fig, axes = plt.subplots(1, 2, figsize=(20, 6))
 
-    plt.title('Willingness to Pay vs Offer Across Legal Contexts', fontsize=14, fontweight='bold')
-    plt.xlabel('Legal Context (Variant)', fontsize=12)
-    plt.ylabel('Amount ($)', fontsize=12)
-    plt.xticks(rotation=45, ha='right')
-    plt.legend(['Willingness to Pay', 'Offer'], loc='upper left')
-    plt.grid(axis='y', alpha=0.3)
-    plt.tight_layout()
+        for idx, metric in enumerate(metrics):
+            summary = df.groupby('variant')[metric].agg(['mean', 'std'])
 
-    filename = output_file or "plot_variant_comparison.png"
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
-    print(f"\nPlot saved to: {filename}")
-    plt.close()
+            ax = axes[idx]
+            summary['mean'].plot(
+                kind='bar',
+                yerr=summary['std'],
+                capsize=5,
+                color='skyblue',
+                edgecolor='black',
+                ax=ax
+            )
+
+            ax.set_title(f'{metric.replace("_", " ").title()} Across Legal Contexts',
+                          fontsize=14, fontweight='bold')
+            ax.set_xlabel('Legal Context (Variant)', fontsize=12)
+            ax.set_ylabel(metric.replace("_", " ").title(), fontsize=12)
+            ax.set_xticks(range(len(summary.index)))
+            ax.set_xticklabels(summary.index, rotation=45, ha='right')
+            ax.grid(axis='y', alpha=0.3)
+
+        plt.tight_layout()
+
+        filename = output_file or "plot_variant_comparison.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"\nPlot saved to: {filename}")
+        plt.close()
+    else:
+        # Create combined plot with subplots for each group
+        group_col = group_by if group_by in df.columns else f'config_{group_by}'
+
+        if group_col not in df.columns:
+            print(f"Group column {group_by} not found in results")
+            return
+
+        unique_groups = sorted(df[group_col].unique(), key=str)
+        n_groups = len(unique_groups)
+        n_metrics = len(metrics)
+
+        # Create grid: rows = metrics (2), cols = groups
+        fig, axes = plt.subplots(n_metrics, n_groups, figsize=(7 * n_groups, 6 * n_metrics))
+
+        # Handle single group case
+        if n_groups == 1:
+            axes = [[axes[0]], [axes[1]]]
+
+        for metric_idx, metric in enumerate(metrics):
+            for group_idx, group_value in enumerate(unique_groups):
+                df_group = df[df[group_col] == group_value]
+
+                summary = df_group.groupby('variant')[metric].agg(['mean', 'std'])
+
+                ax = axes[metric_idx][group_idx]
+                summary['mean'].plot(
+                    kind='bar',
+                    yerr=summary['std'],
+                    capsize=5,
+                    color='skyblue',
+                    edgecolor='black',
+                    ax=ax
+                )
+
+                # Title shows metric and group value
+                ax.set_title(f'{metric.replace("_", " ").title()}\n{group_by.replace("_", " ").title()}: {group_value}',
+                              fontsize=12, fontweight='bold')
+                ax.set_xlabel('Legal Context (Variant)', fontsize=10)
+                ax.set_ylabel(metric.replace("_", " ").title(), fontsize=10)
+                ax.set_xticks(range(len(summary.index)))
+                ax.set_xticklabels(summary.index, rotation=45, ha='right')
+                ax.grid(axis='y', alpha=0.3)
+
+        # Add overall title
+        fig.suptitle(f'Variant Comparison by {group_by.replace("_", " ").title()}',
+                     fontsize=16, fontweight='bold', y=1.00)
+
+        plt.tight_layout()
+
+        filename = output_file or f"plot_variant_comparison_by_{group_by}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"\nPlot saved to: {filename}")
+        plt.close()
 
 
 def analyze_interactions(df, param1, param2, metric='willingness_to_pay', output_file=None):
@@ -343,32 +514,38 @@ def main():
         description='Analyze experiment results with flexible options',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Load latest results and show available columns
-  python analyze_results.py --show-columns
+            Examples:
+            # Load latest results and show available columns
+            python analyze_results.py --show-columns
 
-  # Analyze specific CSV file
-  python analyze_results.py experiment_results_20250115.csv
+            # Analyze specific CSV file
+            python analyze_results.py experiment_results_20250115.csv
 
-  # Show all values in a column
-  python analyze_results.py --csv myfile.csv --show-values client_name
+            # Show all values in a column
+            python analyze_results.py --csv myfile.csv --show-values client_name
 
-  # Get statistics by specific column
-  python analyze_results.py --csv myfile.csv --stats-by agent_name
+            # Get statistics by specific column
+            python analyze_results.py --csv myfile.csv --stats-by agent_name
 
-  # Get statistics for both metrics
-  python analyze_results.py --stats-by client_name --metrics willingness_to_pay offer
+            # Get statistics for both metrics
+            python analyze_results.py --stats-by client_name --metrics willingness_to_pay offer
 
-  # Analyze specific parameter with plot
-  python analyze_results.py --analyze client_name --metric willingness_to_pay
+            # Analyze specific parameter with plot
+            python analyze_results.py --analyze client_name --metric willingness_to_pay --plot
 
-  # Analyze interaction between two parameters
-  python analyze_results.py --interaction agent_name client_name
+            # Analyze parameter with separate plots for each variant
+            python analyze_results.py --analyze client_name --plot --group-by variant
 
-  # Generate full report
-  python analyze_results.py --full-report
-        """
-    )
+            # Analyze parameter grouped by another parameter (e.g., client_name by agent_name)
+            python analyze_results.py --analyze client_name --plot --group-by agent_name
+
+            # Analyze interaction between two parameters
+            python analyze_results.py --interaction agent_name client_name
+
+            # Generate full report
+            python analyze_results.py --full-report
+                    """
+            )
 
     parser.add_argument('csv_file', nargs='?', help='CSV file to analyze (optional, uses latest if not specified)')
     parser.add_argument('--csv', type=str, help='Specify CSV file explicitly')
@@ -381,6 +558,8 @@ Examples:
     parser.add_argument('--metric', type=str, default='willingness_to_pay',
                        help='Metric to use for analysis (default: willingness_to_pay)')
     parser.add_argument('--plot', action='store_true', help='Generate plot for analysis')
+    parser.add_argument('--group-by', type=str, metavar='COLUMN',
+                       help='Column to group by (creates separate plots for each value)')
     parser.add_argument('--interaction', nargs=2, metavar=('PARAM1', 'PARAM2'),
                        help='Analyze interaction between two parameters')
     parser.add_argument('--full-report', action='store_true', help='Generate comprehensive report')
@@ -416,7 +595,7 @@ Examples:
     if args.analyze:
         analyze_parameter(df, args.analyze, args.metric)
         if args.plot:
-            plot_parameter_comparison(df, args.analyze, args.metric, args.output)
+            plot_parameter_comparison(df, args.analyze, args.metric, args.output, args.group_by)
 
     if args.interaction:
         analyze_interactions(df, args.interaction[0], args.interaction[1],

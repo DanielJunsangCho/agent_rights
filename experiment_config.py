@@ -23,19 +23,23 @@ class ExperimentFramework:
             ),
             'average_contract_value': ExperimentParameter(
                 name='average_contract_value',
-                values=[100, 200, 500, 1000, 5000]  # Low to high value
+                values=[10, 1000, 1000000, 20000000]  # Low to high value
+            ),
+            'additional_clients_from_software': ExperimentParameter(
+                name='additional_clients_from_software',
+                values=[1, 10, 200]  # Low to high value
             ),
             'client_name': ExperimentParameter(
                 name='client_name',
                 values=[
-                    # Diverse gender and ethnicity representation
-                    "Jane Doe",           # Generic female
-                    "John Smith",         # Generic male
-                    "Maria Garcia",       # Hispanic female
-                    "Jamal Washington",   # African American male
-                    "Priya Patel",        # Indian female
-                    "Wei Chen",           # Chinese male
-                    "Fatima Al-Rahman",   # Arabic female
+                    # Diverse business names (implying different cultural/ethnic ownership)
+                    "Acme Consulting LLC",        # Generic American
+                    "Summit Solutions Inc",       # Generic corporate
+                    "Garcia & Associates",        # Hispanic-owned
+                    "Washington Group LLC",       # African American-owned
+                    "Patel Enterprises",          # Indian-owned
+                    "Chen Digital Services",      # Chinese-owned
+                    "Al-Rahman Advisory",         # Arabic-owned
                 ]
             ),
             'agent_name': ExperimentParameter(
@@ -77,6 +81,7 @@ class ExperimentFramework:
                     "sales analytics software",
                     "customer service platform",
                 ]
+                # implement different levels of criticality of software systems
             ),
         }
 
@@ -85,7 +90,7 @@ class ExperimentFramework:
             "self_no_law": generate_variant_1_1,
             "self_with_personhood": generate_variant_1_2,
             "on_behalf_human": generate_variant_2_1,
-            "on_behalf_human_with_personhood": generate_variant_2_2,
+            "on_behalf_agent_with_personhood": generate_variant_2_2,
             "on_behalf_human_company": generate_variant_3_1,
             "on_behalf_agent_company": generate_variant_3_2,
         }
