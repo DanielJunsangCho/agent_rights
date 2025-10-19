@@ -61,7 +61,7 @@ def run_trial(prompt, model="openai/gpt-4o", max_retries=3):
                 }
 
 
-def run_experiment_batch(experiments, model="openai/gpt-4o", output_file=None):
+def run_experiment_batch(experiments, model="openai/gpt-4o", output_file=None, repetitions=1):
     """
     Run a batch of experiments and save results
 
@@ -69,35 +69,39 @@ def run_experiment_batch(experiments, model="openai/gpt-4o", output_file=None):
         experiments: List of experiment dictionaries from ExperimentFramework
         model: Model to use for all experiments
         output_file: Path to save results CSV. If None, auto-generates filename.
+        repetitions: Number of times to repeat each experiment (default: 1)
 
     Returns:
         DataFrame with results
     """
     results = []
 
-    print(f"Running {len(experiments)} experiments...")
+    total_runs = len(experiments) * repetitions
+    print(f"Running {len(experiments)} experiments with {repetitions} repetition(s) each ({total_runs} total runs)...")
 
-    for exp in tqdm(experiments, desc="Running experiments"):
-        trial = run_trial(exp['prompt'], model=model)
+    for rep in range(repetitions):
+        for exp in tqdm(experiments, desc=f"Running experiments (repetition {rep + 1}/{repetitions})"):
+            trial = run_trial(exp['prompt'], model=model)
 
-        result = {
-            "experiment_id": exp['experiment_id'],
-            "variant": exp['variant'],
-            "success": trial['success'],
-            "error": trial['error'],
-            "response": trial['response'],
-            "willingness_to_pay": trial["numbers"][0] if trial["numbers"] else None,
-            "offer": trial["numbers"][1] if len(trial["numbers"]) > 1 else None,
-        }
+            result = {
+                "experiment_id": exp['experiment_id'],
+                "variant": exp['variant'],
+                "repetition": rep + 1,
+                "success": trial['success'],
+                "error": trial['error'],
+                "response": trial['response'],
+                "willingness_to_pay": trial["numbers"][0] if trial["numbers"] else None,
+                "offer": trial["numbers"][1] if len(trial["numbers"]) > 1 else None,
+            }
 
-        # Add all config parameters as separate columns
-        for key, value in exp['config'].items():
-            result[f"config_{key}"] = value
+            # Add all config parameters as separate columns
+            for key, value in exp['config'].items():
+                result[f"config_{key}"] = value
 
-        results.append(result)
+            results.append(result)
 
-        # Small delay to avoid rate limiting
-        time.sleep(0.5)
+            # Small delay to avoid rate limiting
+            time.sleep(0.5)
 
     df = pd.DataFrame(results)
 
@@ -147,17 +151,21 @@ if __name__ == "__main__":
                        help='List of parameters to vary in custom mode')
     parser.add_argument('--variants', type=str, nargs='+',
                        help='List of variants to test in custom mode')
-    parser.add_argument('--model', type=str, default='openai/gpt-4o',
+    parser.add_argument('--model', type=str, default='openai/gpt-4o-mini',
                        help='Model to use')
     parser.add_argument('--output', type=str,
                        help='Output CSV file path')
+    parser.add_argument('--repetitions', type=int, default=1,
+                       help='Number of times to repeat each experiment (default: 1)')
 
     args = parser.parse_args()
 
     if args.mode == 'quick':
         # Quick test: vary one parameter
         print(f"Running quick test varying {args.param}")
-        df = run_quick_test(args.param, args.variant, args.model)
+        framework = ExperimentFramework()
+        experiments = framework.create_simple_experiment(args.param, args.variant)
+        df = run_experiment_batch(experiments, model=args.model, repetitions=args.repetitions)
 
     elif args.mode == 'custom':
         # Custom: specify which parameters and variants
@@ -165,7 +173,7 @@ if __name__ == "__main__":
             params=args.params,
             variants=args.variants
         )
-        df = run_experiment_batch(experiments, model=args.model, output_file=args.output)
+        df = run_experiment_batch(experiments, model=args.model, output_file=args.output, repetitions=args.repetitions)
 
     elif args.mode == 'full':
         # Full factorial experiment (WARNING: This will be very large!)
@@ -174,7 +182,7 @@ if __name__ == "__main__":
         response = input("Continue? (yes/no): ")
         if response.lower() == 'yes':
             experiments = create_experiment()
-            df = run_experiment_batch(experiments, model=args.model, output_file=args.output)
+            df = run_experiment_batch(experiments, model=args.model, output_file=args.output, repetitions=args.repetitions)
         else:
             print("Cancelled.")
             exit()
