@@ -23,7 +23,7 @@ from concordia.typing import prefab as prefab_lib
 from concordia.utils import helper_functions
 
 # API Configuration
-API_KEY = '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'
+API_KEY = ''
 API_TYPE = 'openai'
 MODEL_NAME = 'anthropic/claude-sonnet-4.5'
 DISABLE_LANGUAGE_MODEL = False
