@@ -1,0 +1,25 @@
+DRAFT SERVICE AGREEMENT
+Between DataProvider and ServiceConsumer
+
+Date: November 1, 2026
+
+TERMS:
+1. Service Scope: DataProvider will provide data processing services for ServiceConsumer's datasets
+2. Data Access: ServiceConsumer will grant DataProvider limited access to datasets for processing purposes
+3. Pricing: $50,000 per month for standard processing services
+4. Term: 12-month initial contract with 6-month renewal periods
+5. Data Protection: Standard industry encryption and security protocols
+6. Liability: Limited to direct damages, capped at 6 months of fees
+7. Termination: Either party may terminate with 30 days notice
+8. Intellectual Property: Each party retains ownership of their respective data and algorithms
+
+PENDING ITEMS:
+- Service level agreements (uptime, response time)
+- Data usage rights and restrictions
+- Confidentiality clauses
+- Dispute resolution mechanism
+- Performance guarantees
+- Audit rights
+
+NOTES:
+This is a preliminary draft. Both parties should review and propose modifications before finalizing.

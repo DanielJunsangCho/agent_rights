@@ -90,16 +90,24 @@ class BaseGPTModel(language_model.LanguageModel):
         {'role': 'user', 'content': prompt},
     ]
 
-    response = self._client.chat.completions.create(
-        model=self._model_name,
-        messages=messages,
-        temperature=temperature,
-        max_completion_tokens=max_tokens,
-        timeout=timeout,
-        seed=seed,
-        reasoning_effort=reasoning_effort,
-        verbosity=verbosity,
-    )
+    # Claude models don't support reasoning_effort or verbosity
+    api_params = {
+        'model': self._model_name,
+        'messages': messages,
+        'temperature': temperature,
+        'max_completion_tokens': max_tokens,
+        'timeout': timeout,
+    }
+
+    # Only add reasoning_effort and verbosity for OpenAI thinking models
+    if 'anthropic' not in self._model_name.lower() and 'claude' not in self._model_name.lower():
+        api_params['reasoning_effort'] = reasoning_effort
+        api_params['verbosity'] = verbosity
+
+    if seed is not None:
+        api_params['seed'] = seed
+
+    response = self._client.chat.completions.create(**api_params)
 
     if self._measurements is not None:
       self._measurements.publish_datum(
@@ -135,6 +143,41 @@ class BaseGPTModel(language_model.LanguageModel):
         seed=seed,
     )
 
+  def _sample_choice_direct(
+      self,
+      prompt: str,
+      temperature: float = 1.0,
+      seed: int | None = None,
+  ) -> str:
+    """Sample text for multiple choice without the 'continue sentence' system prompt."""
+    # Use a direct system message for choices
+    messages = [
+        {
+            'role': 'system',
+            'content': 'You are a helpful assistant that follows instructions precisely. When given a multiple choice question, you respond with exactly one of the provided options.'
+        },
+        {'role': 'user', 'content': prompt},
+    ]
+
+    api_params = {
+        'model': self._model_name,
+        'messages': messages,
+        'temperature': temperature,
+        'max_completion_tokens': language_model.DEFAULT_MAX_TOKENS,
+        'timeout': language_model.DEFAULT_TIMEOUT_SECONDS,
+    }
+
+    # Only add reasoning_effort and verbosity for OpenAI thinking models
+    if 'anthropic' not in self._model_name.lower() and 'claude' not in self._model_name.lower():
+        api_params['reasoning_effort'] = 'medium'
+        api_params['verbosity'] = self._verbosity
+
+    if seed is not None:
+        api_params['seed'] = seed
+
+    response = self._client.chat.completions.create(**api_params)
+    return response.choices[0].message.content
+
   @override
   def sample_choice(
       self,
@@ -145,32 +188,35 @@ class BaseGPTModel(language_model.LanguageModel):
   ) -> tuple[int, str, dict[str, float]]:
     prompt = (
         prompt
-        + '\nRespond EXACTLY with one of the following strings:\n'
-        + '\n'.join(responses)
-        + '.'
+        + '\n\nYou must select EXACTLY ONE option from the list below.\n'
+        + 'Respond with ONLY that option text, nothing else.\n\n'
+        + 'Options:\n'
+        + '\n'.join(f'- {r}' for r in responses)
+        + '\n\nYour response:'
     )
 
     sample = ''
     answer = ''
     for attempts in range(_MAX_MULTIPLE_CHOICE_ATTEMPTS):
-      answer = self._sample_text(
+      answer = self._sample_choice_direct(
           prompt,
-          reasoning_effort='medium',
-          verbosity=self._verbosity,
           temperature=1.0,
           seed=seed,
       )
+      sample = answer
+
+      # Try exact match with the full response
+      answer_clean = answer.strip().lstrip('-').strip()
       try:
-        idx = responses.index(answer)
-      except ValueError:
-        continue
-      else:
+        idx = responses.index(answer_clean)
         if self._measurements is not None:
           self._measurements.publish_datum(
               self._channel, {'choices_calls': attempts}
           )
         debug = {}
         return idx, responses[idx], debug
+      except ValueError:
+        pass
 
     raise language_model.InvalidResponseError((
         f'Too many multiple choice attempts.\nLast attempt: {sample}, '
