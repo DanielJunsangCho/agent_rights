@@ -32,7 +32,7 @@ import concordia.prefabs.entity as entity_prefabs
 import concordia.prefabs.game_master as game_master_prefabs
 
 # API Configuration
-API_KEY = os.getenv("OPR_KEY", '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')
+API_KEY = os.getenv("OPR_KEY", '')
 MODEL_NAME = 'anthropic/claude-sonnet-4.5'
 DISABLE_LANGUAGE_MODEL = False
 
